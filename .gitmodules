@@ -1,0 +1,6 @@
+[submodule "third_party/champsim-dpc4"]
+	path = third_party/champsim-dpc4
+	url = https://github.com/CMU-SAFARI/ChampSim
+[submodule "third_party/berti-artifact"]
+	path = third_party/berti-artifact
+	url = https://github.com/agusnt/Berti-Artifact

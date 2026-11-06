@@ -1,0 +1,9 @@
+/traces/
+/results/raw/
+__pycache__/
+*.py[cod]
+/reports/*/*.aux
+/reports/*/*.log
+/reports/*/*.out
+/results/normalized/
+/reports/
