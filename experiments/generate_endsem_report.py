@@ -61,6 +61,10 @@ def tex_escape(value: str) -> str:
     return "".join(replacements.get(character, character) for character in value)
 
 
+def tex_break_hash(value: str) -> str:
+    return r"\allowbreak{}".join(value[index : index + 8] for index in range(0, len(value), 8))
+
+
 def read_csv(path: Path) -> list[dict[str, str]]:
     try:
         with path.open(encoding="utf-8", newline="") as source:
@@ -578,29 +582,35 @@ def make_tex(
         predictor_diagnosis(workload, l2, access[workload], pythia[workload], berti[workload], fdp[workload], attribution)
         for workload in WORKLOADS
     )
-    return rf"""\documentclass[10pt]{{article}}
-\usepackage[a4paper,margin=1.55cm]{{geometry}}
-\usepackage{{booktabs,longtable,graphicx,float,hyperref,parskip,makecell}}
-\hypersetup{{colorlinks=true,linkcolor=blue,urlcolor=blue}}
-\title{{Endsem: Workload-Level Prefetcher Diagnosis}}
-\author{{Stridewise project simulation results}}
-\date{{}}
+    return rf"""\documentclass[conference]{{IEEEtran}}
+\usepackage{{cite}}
+\usepackage{{amsmath,amssymb}}
+\usepackage{{booktabs,flushend,graphicx,makecell,url}}
+\usepackage[hidelinks]{{hyperref}}
+\hypersetup{{pdftitle={{Workload-Level Prefetcher Diagnosis}}}}
+\author{{}}
+\title{{Workload-Level Prefetcher Diagnosis}}
+\setlength{{\emergencystretch}}{{2em}}
 \begin{{document}}
 \maketitle
 
 \begin{{abstract}}
-This endsem evaluation adds Pythia at L2, Berti in a separate L1D scenario, conservative mechanism-aware miss attribution, and one feedback-directed IP-stride variant to the required L2 comparison. Every conclusion is tied to matched trace runs, normalized counters, and bounded access-stream evidence. These are project-specific ChampSim trace simulations, not official SPEC CPU2017 results.
+This evaluation adds Pythia at L2, Berti in a separate L1D scenario, conservative mechanism-aware miss attribution, and one feedback-directed IP-stride variant to the required L2 comparison. Every conclusion is tied to matched trace runs, normalized counters, and bounded access-stream evidence. These are project-specific ChampSim trace simulations, not official SPEC CPU2017 results.
 \end{{abstract}}
 
-\section{{Executive summary}}
+\begin{{IEEEkeywords}}
+hardware prefetching, memory hierarchy, ChampSim, performance evaluation
+\end{{IEEEkeywords}}
+
+\section{{Introduction}}
 Within the same-level L2 group, geometric-mean IPC speedups are {ip_mean:.3f} for IP-stride, {spp_mean:.3f} for SPP, {ampm_mean:.3f} for VA-AMPM, and {pythia_mean:.3f} for Pythia, each against a matched no-prefetch L2 run. The highest per-workload L2 IPC results are distributed as follows: {tex_escape(winner_counts)}. Berti's separate L1D scenario has a geometric-mean speedup of {berti_mean:.3f} against matched L1D no-prefetch. It is not ranked against L2 prefetchers.
 
 The feedback-directed IP-stride variant has a geometric-mean IPC ratio of {fdp_mean:.3f} against original IP-stride. It gains IPC on {fdp_improved_ipc}/10 workloads, reduces DRAM bytes without an IPC loss on {fdp_lower_traffic_no_loss}/10, and regresses IPC on {fdp_regressions}/10. The per-workload table reports both outcomes separately; no aggregate score combines them.
 
 \section{{Campaign setup and comparison groups}}
-Each campaign uses the pinned ChampSim DPC4 source revision {tex_escape(source_revisions[0] if source_revisions else "unavailable")}, the tracked one-core full-bandwidth profile (SHA-256 prefix \texttt{{3c4306007d9c1d39}}), 50 million warmup instructions, and a requested 100 million-instruction ROI. Across the compared runs, actual retired ROI instructions range from {actual_roi_min:,} to {actual_roi_max:,}. The runner records each exact count, trace hash, effective-config hash, binary hash, and run ID. All prefetchers except the selected target are disabled.
+Each campaign uses the pinned ChampSim DPC4 source revision \texttt{{{tex_break_hash(source_revisions[0] if source_revisions else "unavailable")}}} \cite{{champsim}}, the tracked one-core full-bandwidth profile (SHA-256 prefix \texttt{{3c4306007d9c1d39}}), 50 million warmup instructions, and a requested 100 million-instruction ROI. Across the compared runs, actual retired ROI instructions range from {actual_roi_min:,} to {actual_roi_max:,}. The runner records each exact count, trace hash, effective-config hash, binary hash, and run ID. All prefetchers except the selected target are disabled.
 
-The L2 comparison contains no prefetching, IP-stride, SPP, VA-AMPM-lite, and Pythia, all at L2C against their workload-matched no-prefetch L2 controls. The Berti campaign runs only at L1D and uses its own matched L1D no-prefetch controls. The feedback-directed variant is compared with original IP-stride on identical traces, profile, and ROI. Its two source files are fingerprinted as a project overlay on the same pinned ChampSim revision.
+The L2 comparison contains no prefetching, IP-stride, SPP \cite{{spp}}, VA-AMPM-lite \cite{{ampm}}, and Pythia \cite{{pythia}}, all at L2C against their workload-matched no-prefetch L2 controls. The Berti campaign runs only at L1D and uses its own matched L1D no-prefetch controls \cite{{berti}}. The feedback-directed variant is compared with original IP-stride on identical traces, profile, and ROI \cite{{fdp}}. Its two source files are fingerprinted as a project overlay on the same pinned ChampSim revision.
 
 \section{{Metrics and evidence limits}}
 L2 coverage is (matched no-prefetch L2 LOAD misses minus configured L2 LOAD misses) / matched no-prefetch L2 LOAD misses. Berti coverage uses the analogous L1D misses. Accuracy follows the project formula: useful-prefetch events / configured-level prefetch fills. The data preserve the numerator and denominator for each row. ChampSim increments useful events for demand merges onto outstanding prefetches, so this project-defined ratio can exceed one and is not a probability. IPC speedup is candidate ROI IPC / matched baseline ROI IPC. DRAM bytes and transactions are counted at the memory controller; request-type attribution reflects the type retained at service and does not reverse earlier demand/prefetch merges.
@@ -608,94 +618,88 @@ L2 coverage is (matched no-prefetch L2 LOAD misses minus configured L2 LOAD miss
 The bounded L2 sample retains at most 10,000 demand loads per run. PC-local counts expanded from the reservoir are estimates. A transition is called contiguous only when its global access-order gap is exactly one. The feedback controller's pending-address map only matches delayed use/eviction outcomes to issue-degree cohorts; it records no event timestamps or reusable request history. The campaign does not retain a per-request issue-to-fill-to-demand timeline or full predictor-state snapshot. Therefore late prefetching, predictor-table evictions, and policy-learning failures are discussed as unresolved where the measured evidence cannot separate them. Useful and useless counters are aggregate diagnostics, not address-level timeliness labels.
 
 \section{{Same-level L2 results}}
-\begin{{figure}}[H]\centering
-\includegraphics[width=\linewidth]{{figures/l2-ipc-speedup.png}}
-\caption{{Per-workload IPC speedup for the five L2 configurations against matched no-prefetch L2.}}\end{{figure}}
+Figs.~\ref{{fig:l2-ipc}}--\ref{{fig:l2-traffic}} summarize workload-level IPC and traffic outcomes; Table~\ref{{tab:l2-results}} gives the corresponding counters and ratios.
 
-\begin{{figure}}[H]\centering
-\includegraphics[width=0.95\linewidth]{{figures/l2-geomeans.png}}
-\caption{{Geometric means are shown within their comparison groups. The Berti panel is L1D; the FDP panel compares against original IP-stride.}}\end{{figure}}
+\begin{{figure*}}[!t]\centering
+\includegraphics[width=0.95\textwidth]{{figures/l2-ipc-speedup.png}}
+\caption{{Per-workload IPC speedup for the five L2 configurations against matched no-prefetch L2.}}\label{{fig:l2-ipc}}\end{{figure*}}
 
-\begin{{figure}}[H]\centering
-\includegraphics[width=\linewidth]{{figures/l2-dram-bytes.png}}
-\caption{{Total DRAM bytes relative to matched no-prefetch L2.}}\end{{figure}}
+\begin{{figure*}}[!t]\centering
+\includegraphics[width=0.95\textwidth]{{figures/l2-geomeans.png}}
+\caption{{Geometric means within their comparison groups. Berti is evaluated at L1D; FDP is compared with original IP-stride.}}\label{{fig:l2-geomeans}}\end{{figure*}}
 
-\scriptsize\setlength{{\tabcolsep}}{{3pt}}
-\begin{{longtable}}{{@{{}}p{{1.45cm}}p{{1.35cm}}rrrrrrr@{{}}}}
-\caption{{Per-workload L2 results, DRAM transactions, and bytes}}\\
-\toprule Workload & Configuration & Base MPKI & Coverage & Accuracy & IPC speedup & Read tx & Write tx & DRAM MiB \\
+\begin{{figure*}}[!t]\centering
+\includegraphics[width=0.95\textwidth]{{figures/l2-dram-bytes.png}}
+\caption{{Total DRAM bytes relative to matched no-prefetch L2.}}\label{{fig:l2-traffic}}\end{{figure*}}
+
+\begin{{table*}}[!t]
+\caption{{Per-workload L2 results, DRAM transactions, and bytes}}\label{{tab:l2-results}}
+\centering\scriptsize\setlength{{\tabcolsep}}{{3pt}}
+\begin{{tabular}}{{@{{}}p{{1.2cm}}p{{1.45cm}}rrrrrrr@{{}}}}
+\toprule Workload & Config. & Base MPKI & Coverage & Accuracy & IPC speedup & Read tx & Write tx & DRAM MiB \\
 \midrule
-\endfirsthead
-\toprule Workload & Configuration & Base MPKI & Coverage & Accuracy & IPC speedup & Read tx & Write tx & DRAM MiB \\
-\midrule
-\endhead
 {l2_table(l2_rows)}
 \bottomrule
-\end{{longtable}}
-\normalsize
+\end{{tabular}}
+\end{{table*}}
 
 \section{{Separate L1D Berti scenario}}
-Berti is evaluated at the cache level where its implementation observes demand accesses. Its coverage, accuracy, and speedup use L1D counters and an L1D no-prefetch baseline; those rows are not part of the L2 ranking.
+Berti is evaluated at the cache level where its implementation observes demand accesses. Its coverage, accuracy, and speedup use L1D counters and an L1D no-prefetch baseline; those rows are not part of the L2 ranking. Table~\ref{{tab:berti}} summarizes this separate comparison.
 
-\scriptsize\setlength{{\tabcolsep}}{{3pt}}
-\begin{{longtable}}{{@{{}}p{{2.2cm}}rrrrrrrr@{{}}}}
-\caption{{Berti at L1D against matched L1D no-prefetch}}\\
+\begin{{table*}}[!t]
+\caption{{Berti at L1D against matched L1D no-prefetch}}\label{{tab:berti}}
+\centering\scriptsize\setlength{{\tabcolsep}}{{3pt}}
+\begin{{tabular}}{{@{{}}p{{1.7cm}}rrrrrrrr@{{}}}}
 \toprule Workload & Base MPKI & LOAD misses & Coverage & Accuracy & IPC speedup & Read tx & Write tx & DRAM MiB \\
 \midrule
-\endfirsthead
-\toprule Workload & Base MPKI & LOAD misses & Coverage & Accuracy & IPC speedup & Read tx & Write tx & DRAM MiB \\
-\midrule
-\endhead
 {berti_table(berti_rows)}
 \bottomrule
-\end{{longtable}}
-\normalsize
+\end{{tabular}}
+\end{{table*}}
 
 \section{{Feedback-directed IP-stride variant}}
 The variant retains the original 256-set, four-way per-PC last-address/last-stride table, page-boundary check, MSHR-aware request choice, and three-line maximum lookahead. Its one controlled parameter is lookahead degree, clamped to 1--3. Accepted prefetches are tracked by cache-line address and tagged with the latest degree that submitted that still-pending address; duplicate submissions to one pending address count once. A demand use, eviction, or demand fill resolves that prefetch address episode. Every 4,096 resolved prefetch address episodes for one degree, the controller computes that cohort's useful fraction, reduces degree below 30\%, and raises it at or above 45\% only when that degree remains active. Counters span warmup and ROI; pending addresses at end of run are excluded. This is an FDP-inspired single-control response, not a reproduction of FDP's sampled lateness/pollution controller.
 
 The signal choice follows the observed failure modes. IP-stride provides only {pct(omnet_baseline, 'coverage')} L2 coverage and {number(omnet_baseline, 'ipc_speedup'):.3f}$\times$ IPC on omnetpp, and {pct(mcf_baseline, 'coverage')} coverage with {number(mcf_baseline, 'ipc_speedup'):.3f}$\times$ IPC on mcf. Across the ten baseline runs, the aggregate useful-event/accepted-request diagnostic ranges from {lowest_feedback:.3f} ({WORKLOAD_LABELS[lowest_workload]}) to {highest_feedback:.3f} ({WORKLOAD_LABELS[highest_workload]}), supporting usefulness as a candidate feedback signal. The baseline did not record prefetch address episodes, so this aggregate ratio does not calibrate the 30\%/45\% thresholds. Those thresholds are initial low/high settings for evaluating the single degree control; they should not be read as empirically tuned cutoffs. The controller uses resolved prefetch address episodes grouped by the latest degree associated with each address. Its conceptual state is one degree register and per-degree outcome counters. The simulator uses a pending-address map to associate delayed use and eviction callbacks with the degree; this is measurement instrumentation, not a hardware design or area estimate. Cumulative totals are diagnostic.
 
-\begin{{figure}}[H]\centering
-\includegraphics[width=0.94\linewidth]{{figures/fdp-ipc-and-traffic.png}}
-\caption{{Per-workload FDP-IP-stride IPC and traffic ratios against original IP-stride.}}\end{{figure}}
+The workload-level tradeoffs are shown in Fig.~\ref{{fig:fdp}} and Table~\ref{{tab:fdp}}.
 
-\scriptsize\setlength{{\tabcolsep}}{{3pt}}
-\begin{{longtable}}{{@{{}}p{{1.5cm}}rrrrrrr@{{}}}}
-\caption{{FDP-IP-stride relative to original IP-stride}}\\
-\toprule Workload & Incremental coverage & Accuracy & Useful/resolved prefetch address episodes & IPC ratio & DRAM byte ratio & Final degree & Up/down \\
+\begin{{figure*}}[!t]\centering
+\includegraphics[width=0.95\textwidth]{{figures/fdp-ipc-and-traffic.png}}
+\caption{{Per-workload FDP-IP-stride IPC and traffic ratios against original IP-stride.}}\label{{fig:fdp}}\end{{figure*}}
+
+\begin{{table*}}[!t]
+\caption{{FDP-IP-stride relative to original IP-stride}}\label{{tab:fdp}}
+\centering\scriptsize\setlength{{\tabcolsep}}{{2pt}}
+\begin{{tabular}}{{@{{}}p{{1.35cm}}rrrrrrr@{{}}}}
+\toprule Workload & \makecell{{Incremental\\coverage}} & Accuracy & \makecell{{Useful / resolved\\episodes}} & \makecell{{IPC\\ratio}} & \makecell{{DRAM byte\\ratio}} & \makecell{{Final\\degree}} & Up/down \\
 \midrule
-\endfirsthead
-\toprule Workload & Incremental coverage & Accuracy & Useful/resolved prefetch address episodes & IPC ratio & DRAM byte ratio & Final degree & Up/down \\
-\midrule
-\endhead
 {fdp_table(fdp_rows)}
 \bottomrule
-\end{{longtable}}
-\normalsize
+\end{{tabular}}
+\end{{table*}}
 
 An outcome counts as an IPC improvement when its ratio exceeds 1.0. A traffic improvement counts only when DRAM bytes decrease and IPC does not fall. The table leaves higher-traffic IPC gains and lower-traffic IPC regressions visible as separate outcomes. Accuracy uses the project fill denominator. Useful/resolved prefetch address episodes is the fraction of resolved prefetch address episodes that were later used, counted once per pending address even when multiple accepted submissions target it; unresolved addresses are omitted. No late-prefetch ratio is inferred. Degree changes and counters are retained in the normalized campaign and raw run logs.
 
 \section{{Mechanism-aware miss attribution}}
-The analysis applies the PRISM-inspired cause names only where predictor mechanism and evidence can support them. IP-stride, VA-AMPM, Pythia, Berti, and the FDP variant do not expose the prior-address correlation state required to distinguish unseen correlation from other limitations; those entries are marked not applicable. SPP can represent spatial signatures, so unseen-correlation is potentially applicable, but no per-miss table lookup was recorded. Compulsory misses need complete address history, late prefetches need address-linked timing, and metadata evictions need predictor-state history. Since none of those evidence streams was exported, all measured LOAD misses remain unresolved and zero are assigned a causal label. The per-workload file reports counts for every tested predictor and cache level in \url{{results/normalized/endsem/miss-attribution.json}}.
+The analysis applies the PRISM-inspired cause names only where predictor mechanism and evidence can support them \cite{{prism}}. IP-stride, VA-AMPM, Pythia, Berti, and the FDP variant do not expose the prior-address correlation state required to distinguish unseen correlation from other limitations; those entries are marked not applicable. SPP can represent spatial signatures, so unseen-correlation is potentially applicable, but no per-miss table lookup was recorded. Compulsory misses need complete address history, late prefetches need address-linked timing, and metadata evictions need predictor-state history. Since none of those evidence streams was exported, all measured LOAD misses remain unresolved and zero are assigned a causal label. The per-workload file reports counts for every tested predictor and cache level in \url{{results/normalized/endsem/miss-attribution.json}}.
 
 \section{{Workload-level diagnosis}}
 For each workload the L2 winner is selected by measured IPC within the L2 group. Each explanation reports its coverage, accuracy, traffic, and prefetch counters; contrasts the remaining L2 configurations; relates those outcomes to the bounded stream evidence and predictor class; and preserves uncertainty where internal predictor state or timeliness was unavailable. Berti is reported separately at L1D.
 
 {diagnosis}
 
-\section{{Reproduction artifacts}}
+\section{{Reproducibility artifacts}}
 Normalized result tables, run identities, feedback summaries, and raw evidence archives are in \url{{results/normalized/}}. The L2, Pythia, Berti, and feedback-directed campaigns preserve trace names and SHA-256 values, effective-config identities, simulator revision/source fingerprints, actual ROI instruction counts, telemetry, and bounded L2 samples. The miss-attribution JSON records all considered causes and unresolved counts. LaTeX and compiled PDF are generated by \url{{experiments/generate_endsem_report.py}} from the normalized campaign directories.
 
 \begin{{thebibliography}}{{9}}
-\bibitem{{project}} Project 3: Prefetcher Characterization, course brief, \texttt{{docs/project/CA\_Project3\_Prefetcher\_Characterization.md}}.
-\bibitem{{fdp}} Srinath et al., ``Feedback Directed Prefetching,'' HPCA 2007; supplied source at \texttt{{docs/papers/feedback-directed-prefetching-hpca07.pdf}}.
-\bibitem{{ampm}} Ishii et al., ``Access Map Pattern Matching for High Performance Data Cache Prefetch,'' JILP, 2011; supplied source at \texttt{{docs/papers/ampm.pdf}}.
-\bibitem{{spp}} Kim et al., ``Spatial Memory Streaming,'' ISCA, 2016.
-\bibitem{{berti}} Navarro-Torres et al., ``Berti: an Accurate Local-Delta Data Prefetcher,'' MICRO 2022; supplied source at \texttt{{docs/papers/berti-micro22.pdf}}.
-\bibitem{{pythia}} Bera et al., ``Pythia: A Customizable Hardware Prefetching Framework Using Online Reinforcement Learning,'' MICRO 2021; supplied source at \texttt{{docs/papers/pythia-micro21.pdf}}.
-\bibitem{{prism}} PRISM, MICRO 2026 supplied confidential draft, internal project use only, Section 3, \texttt{{docs/papers/prism-micro2026-paper499.pdf}}.
-\bibitem{{champsim}} ChampSim DPC4 source pinned at {tex_escape(source_revisions[0] if source_revisions else "unavailable")}.
+\bibitem{{fdp}} S. Srinath, O. Mutlu, H. Kim, and Y. N. Patt, \emph{{Feedback Directed Prefetching: Improving the Performance and Bandwidth-Efficiency of Hardware Prefetchers}}, in Proceedings of the 13th International Symposium on High-Performance Computer Architecture (HPCA), pp. 63--74, 2007. doi: \url{{https://doi.org/10.1109/HPCA.2007.346185}}.
+\bibitem{{ampm}} Y. Ishii, M. Inaba, and K. Hiraki, \emph{{Access Map Pattern Matching for High Performance Data Cache Prefetch}}, Journal of Instruction-Level Parallelism, vol. 13, pp. 1--24, 2011. \url{{https://jilp.org/vol13/v13paper3.pdf}}.
+\bibitem{{spp}} S. Somogyi, T. F. Wenisch, A. Ailamaki, B. Falsafi, and A. Moshovos, \emph{{Spatial Memory Streaming}}, in Proceedings of the 33rd Annual International Symposium on Computer Architecture (ISCA), pp. 252--263, 2006. doi: \url{{https://doi.org/10.1109/ISCA.2006.38}}.
+\bibitem{{berti}} A. Navarro-Torres, B. Panda, J. Alastruey-Benedé, P. Ibáñez, V. Viñals-Yúfera, and A. Ros, \emph{{Berti: An Accurate Local-Delta Data Prefetcher}}, in Proceedings of the 55th IEEE/ACM International Symposium on Microarchitecture (MICRO), pp. 975--991, 2022. doi: \url{{https://doi.org/10.1109/MICRO56248.2022.00072}}.
+\bibitem{{pythia}} R. Bera, K. Kanellopoulos, A. V. Nori, T. Shahroodi, S. Subramoney, and O. Mutlu, \emph{{Pythia: A Customizable Hardware Prefetching Framework Using Online Reinforcement Learning}}, in Proceedings of the 54th IEEE/ACM International Symposium on Microarchitecture (MICRO), 2021. doi: \url{{https://doi.org/10.1145/3466752.3480114}}.
+\bibitem{{prism}} Y. Lin, J. Liu, Y. Chen, W. Lin, Z. Wang, and W. Chen, \emph{{PRISM: A Miss-Attribution-Guided Temporal Prefetcher Beyond Metadata Management}}, in Proceedings of the 59th IEEE/ACM International Symposium on Microarchitecture (MICRO), 2026. \url{{https://www.microarch.org/micro59/program/}}.
+\bibitem{{champsim}} N. Gober, G. Chacon, L. Wang, P. V. Gratz, D. A. Jimenez, E. Teran, S. Pugsley, and J. Kim, \emph{{The Championship Simulator: Architectural Simulation for Education and Competition}}, arXiv:2210.14324, 2022. doi: \url{{https://doi.org/10.48550/arXiv.2210.14324}}. The DPC4 source revision used here is \texttt{{{tex_break_hash(source_revisions[0] if source_revisions else "unavailable")}}}: \url{{https://github.com/CMU-SAFARI/ChampSim/tree/{tex_escape(source_revisions[0] if source_revisions else "unavailable")}}}.
 \end{{thebibliography}}
 \end{{document}}
 """
