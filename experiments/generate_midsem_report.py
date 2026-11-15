@@ -283,13 +283,15 @@ def make_tex(rows: list[dict[str, str]], run_document: dict[str, Any], character
     roi = next(iter(identities.values()))["roi"]
     actual = [identity["roi"]["actual_simulation_instructions"] for identity in identities.values()]
     figure_prefix = figures.name
-    return rf"""\documentclass[10pt]{{article}}
-\usepackage[a4paper,margin=1.7cm]{{geometry}}
-\usepackage{{booktabs,longtable,graphicx,float,hyperref,parskip}}
-\hypersetup{{colorlinks=true,linkcolor=blue,urlcolor=blue}}
-\title{{Midsem: L2 Prefetcher Characterization}}
-\author{{Stridewise project simulation results}}
-\date{{}}
+    return rf"""\documentclass[conference]{{IEEEtran}}
+\usepackage{{cite}}
+\usepackage{{amsmath,amssymb}}
+\usepackage{{booktabs,flushend,graphicx,url}}
+\usepackage[hidelinks]{{hyperref}}
+\hypersetup{{pdftitle={{L2 Prefetcher Characterization}}}}
+\author{{}}
+\title{{L2 Prefetcher Characterization}}
+\setlength{{\emergencystretch}}{{2em}}
 \begin{{document}}
 \maketitle
 
@@ -297,76 +299,77 @@ def make_tex(rows: list[dict[str, str]], run_document: dict[str, Any], character
 This report compares no prefetching, IP-stride, SPP, and VA-AMPM at L2 on the fixed ten-workload trace set. It reports matched L2 demand misses, project-defined coverage and accuracy, IPC speedup, DRAM traffic, and bounded access-stream characterization. These are project-specific ChampSim trace simulations, not official SPEC CPU2017 results.
 \end{{abstract}}
 
-\section{{Experiment setup}}
+\begin{{IEEEkeywords}}
+memory prefetching, cache hierarchy, ChampSim, performance evaluation
+\end{{IEEEkeywords}}
+
+\section{{Introduction}}
+Memory prefetchers trade workload-specific latency reduction against memory traffic. This study compares IP-stride, SPP, and VA-AMPM-lite at L2 against matched no-prefetch runs across ten workloads. The evaluation reports IPC, demand-miss coverage, project-defined accuracy, DRAM traffic, and bounded address-stream evidence to characterize how measured outcomes relate to each predictor's mechanism.
+
+\section{{Experimental setup}}
 Each run uses the same single-core profile (SHA-256 prefix \texttt{{{profile_hashes[0][:16]}}}), warms up for 50 million instructions, then requests a 100 million-instruction ROI from instruction {roi['measured_instruction_start']:,} through {roi['measured_instruction_end']:,}. ChampSim records {min(actual):,}--{max(actual):,} retired instructions across the reported ROIs because it completes the final retire group; the runner accepts only the requested count plus fewer than one retire width. Cache line size is 64~B. All prefetchers outside L2C are disabled, and the measured L2 configuration is the only active prefetcher \cite{{champsim}}. The pinned simulator source is {', '.join(tex_escape(revision) for revision in revisions)}; full profile and trace hashes are in the normalized run identities.
 
-\scriptsize\setlength{{\tabcolsep}}{{3pt}}
-\begin{{longtable}}{{@{{}}p{{3.2cm}}p{{9.4cm}}p{{3.5cm}}@{{}}}}
-\caption{{Workload trace identities (SHA-256 prefixes)}}\\
+Table~\ref{{tab:traces}} lists the ten workload traces and their SHA-256 prefixes.
+\begin{{table*}}[!t]
+\caption{{Workload trace identities (SHA-256 prefixes)}}\label{{tab:traces}}
+\centering\scriptsize\setlength{{\tabcolsep}}{{4pt}}
+\begin{{tabular}}{{@{{}}p{{3.2cm}}p{{10.0cm}}p{{3.5cm}}@{{}}}}
 \toprule Workload & Trace & SHA-256 prefix \\
 \midrule
-\endfirsthead
-\toprule Workload & Trace & SHA-256 prefix \\
-\midrule
-\endhead
 {trace_table(identities)}
 \bottomrule
-\end{{longtable}}
-\normalsize
+\end{{tabular}}
+\end{{table*}}
 
 \section{{Metric definitions}}
 Baseline L2 MPKI is baseline L2 LOAD misses divided by baseline ROI instructions/1000. L2 coverage is (matched no-prefetch L2 LOAD misses $-$ configured L2 LOAD misses) / matched no-prefetch L2 LOAD misses. Accuracy follows the project formula, useful prefetch events / L2 prefetch fills \cite{{project}}. IPC speedup is configured ROI IPC / matched no-prefetch ROI IPC, where IPC is ROI instructions / ROI cycles. DRAM traffic reports read and write transaction counts and bytes separately; demand and prefetch read counters use the request type retained when a transaction is serviced.
 
 Some accuracy ratios exceed 1. ChampSim increments its useful-prefetch event counter when demand accesses merge onto an outstanding prefetch, so this project-defined ratio is not a probability. The normalized CSV retains each numerator and denominator, and the evidence archive preserves the counters.
 
-\section{{Four-way L2 results}}
-\scriptsize\setlength{{\tabcolsep}}{{3pt}}
-\begin{{longtable}}{{@{{}}p{{3.0cm}}p{{1.5cm}}rrrrr@{{}}}}
-\caption{{L2 miss, coverage, accuracy, and IPC results for every workload}}\\
+\section{{L2 results}}
+Table~\ref{{tab:metrics}} reports the measured L2 counters and ratios for each workload and configuration.
+\begin{{table*}}[!t]
+\caption{{L2 miss, coverage, accuracy, and IPC results for every workload}}\label{{tab:metrics}}
+\centering\scriptsize\setlength{{\tabcolsep}}{{4pt}}
+\begin{{tabular}}{{@{{}}p{{2.7cm}}p{{1.6cm}}rrrrr@{{}}}}
 \toprule Workload & Configuration & Baseline L2 MPKI & Config. L2 misses & Coverage & Accuracy & IPC speedup \\
 \midrule
-\endfirsthead
-\toprule Workload & Configuration & Baseline L2 MPKI & Config. L2 misses & Coverage & Accuracy & IPC speedup \\
-\midrule
-\endhead
 {metric_table(rows)}
 \bottomrule
-\end{{longtable}}
-\normalsize
+\end{{tabular}}
+\end{{table*}}
 
-The full normalized data in \url{{results/normalized/l2-required/metrics.csv}} includes the coverage, accuracy, MPKI, and IPC numerator/denominator fields, configuration hashes, trace hashes, and per-run identifiers.
+The workload trends appear in Figs.~\ref{{fig:ipc}}--\ref{{fig:traffic}}. The full normalized data in \url{{results/normalized/l2-required/metrics.csv}} includes the coverage, accuracy, MPKI, and IPC numerator/denominator fields, configuration hashes, trace hashes, and per-run identifiers.
 
-\begin{{figure}}[H]
+\begin{{figure*}}[!t]
 \centering
-\includegraphics[width=\linewidth]{{{figure_prefix}/ipc-speedup.png}}
-\caption{{Per-workload IPC speedup at L2; the dashed line is the matched no-prefetch baseline.}}
-\end{{figure}}
+\includegraphics[width=0.95\textwidth]{{{figure_prefix}/ipc-speedup.png}}
+\caption{{Per-workload IPC speedup at L2; the dashed line is the matched no-prefetch baseline.}}\label{{fig:ipc}}
+\end{{figure*}}
 
-\begin{{figure}}[H]
+\begin{{figure*}}[!t]
 \centering
-\includegraphics[width=0.78\linewidth]{{{figure_prefix}/coverage-vs-speedup.png}}
-\caption{{L2 demand-miss coverage and IPC speedup are related but distinct outcomes.}}
-\end{{figure}}
+\includegraphics[width=0.78\textwidth]{{{figure_prefix}/coverage-vs-speedup.png}}
+\caption{{L2 demand-miss coverage and IPC speedup are related but distinct outcomes.}}\label{{fig:coverage}}
+\end{{figure*}}
 
-\scriptsize\setlength{{\tabcolsep}}{{3pt}}
-\begin{{longtable}}{{@{{}}p{{3.0cm}}p{{1.5cm}}rrrrr@{{}}}}
-\caption{{DRAM traffic during each measured ROI}}\\
+Table~\ref{{tab:traffic}} reports DRAM traffic during each measured ROI.
+\begin{{table*}}[!t]
+\caption{{DRAM traffic during each measured ROI}}\label{{tab:traffic}}
+\centering\scriptsize\setlength{{\tabcolsep}}{{4pt}}
+\begin{{tabular}}{{@{{}}p{{2.7cm}}p{{1.6cm}}rrrrr@{{}}}}
 \toprule Workload & Configuration & Read tx. & Write tx. & Demand read MiB & Prefetch read MiB & Total MiB \\
 \midrule
-\endfirsthead
-\toprule Workload & Configuration & Read tx. & Write tx. & Demand read MiB & Prefetch read MiB & Total MiB \\
-\midrule
-\endhead
 {traffic_table(rows)}
 \bottomrule
-\end{{longtable}}
-\normalsize
+\end{{tabular}}
+\end{{table*}}
 
-\begin{{figure}}[H]
+\begin{{figure*}}[!t]
 \centering
-\includegraphics[width=\linewidth]{{{figure_prefix}/relative-dram-bytes.png}}
-\caption{{Total DRAM bytes relative to the matched no-prefetch run for each workload.}}
-\end{{figure}}
+\includegraphics[width=0.95\textwidth]{{{figure_prefix}/relative-dram-bytes.png}}
+\caption{{Total DRAM bytes relative to the matched no-prefetch run for each workload.}}\label{{fig:traffic}}
+\end{{figure*}}
 
 \section{{Access-stream characterization}}
 The L2 demand sample is a deterministic, bounded reservoir sample of at most 10,000 accesses per run. PC-local full-stream miss counts are expanded estimates from the sampling fraction; raw sample counts and access-order gaps remain available in \texttt{{access-characterization.json}}. Sampled transitions are not treated as consecutive real accesses unless their global L2 access-order gap is exactly one. This avoids turning a gap between reservoir observations into a claimed hardware stride. The table below highlights each workload's highest sampled-miss PC, strongest contiguous-delta evidence, observed ordered sequence evidence, and recurring 4~KiB line offsets.
@@ -375,21 +378,22 @@ The L2 demand sample is a deterministic, bounded reservoir sample of at most 10,
 
 Only \texttt{{ligra-pagerankdelta}} has a repeated ordered three-delta sequence in the sampled-observation histories of its top miss PCs; no repeated three-delta sequence appears in the strict contiguous subset. This is a limit of the bounded evidence, not proof that other workloads lack correlation. Page-local footprints provide complementary, order-independent evidence for AMPM-like spatial prediction.
 
-\section{{Interpretation}}
+\section{{Results and discussion}}
 IP-stride tracks addresses by load PC and benefits from stable PC-local deltas. SPP learns recurring spatial patterns and correlations from recent accesses \cite{{spp}}. VA-AMPM-lite records page-local access-map state and can exploit recurring footprints without depending on one PC's stride \cite{{ampm}}. These predictor classes therefore use different evidence: PC-local order for stride, recurring correlated patterns for SPP, and page-local spatial footprint for AMPM.
 
 {workload_interpretations(rows, characterization)}
 
+\section{{Conclusion}}
 Across workloads, geometric-mean IPC speedup is {math.exp(sum(math.log(number(row, 'ipc_speedup')) for row in rows if row['prefetcher'] == 'ip_stride') / 10):.3f} for IP-stride, {math.exp(sum(math.log(number(row, 'ipc_speedup')) for row in rows if row['prefetcher'] == 'spp_dev') / 10):.3f} for SPP, and {math.exp(sum(math.log(number(row, 'ipc_speedup')) for row in rows if row['prefetcher'] == 'va_ampm_lite') / 10):.3f} for VA-AMPM. These geometric means are within the L2 group and use the matched L2 no-prefetch IPC for each workload.
 
-\section{{Reproduction artifacts}}
+\section{{Reproducibility artifacts}}
 The normalized metrics, run identities, access characterization, and archived raw evidence are in \url{{results/normalized/l2-required/}}. Each identity records the trace and configuration hashes, simulator revision, prefetcher level, warmup, requested ROI, and actual retired instructions. Rerun individual simulations with \url{{experiments/run_campaign.py}} and regenerate the summaries with \url{{experiments/normalize_campaign.py}} and \url{{experiments/analyze_access_streams.py}}.
 
 \begin{{thebibliography}}{{9}}
-\bibitem{{project}} Project 3: Prefetcher Characterization, course brief, \texttt{{docs/project/CA\_Project3\_Prefetcher\_Characterization.md}}.
-\bibitem{{ampm}} T. Ishii, M. Inaba, and K. Hiraki, ``Access Map Pattern Matching for High Performance Data Cache Prefetch,'' JILP, 2011.
-\bibitem{{spp}} J. Kim et al., ``Spatial Memory Streaming,'' ISCA, 2016.
-\bibitem{{champsim}} ChampSim DPC4 source pinned at {tex_escape(revisions[0])}.
+\bibitem{{project}} ``Project 3: Prefetcher Characterization,'' course project specification, 2026.
+\bibitem{{ampm}} Y. Ishii, M. Inaba, and K. Hiraki, ``Access Map Pattern Matching for High Performance Data Cache Prefetch,'' Journal of Instruction-Level Parallelism, vol. 13, pp. 1--24, 2011.
+\bibitem{{spp}} S. Somogyi, T. F. Wenisch, A. Ailamaki, B. Falsafi, and A. Moshovos, ``Spatial Memory Streaming,'' in Proceedings of the 33rd Annual International Symposium on Computer Architecture (ISCA), pp. 252--263, 2006.
+\bibitem{{champsim}} N. Gober et al., ``The Championship Simulator: Architectural Simulation for Education and Competition,'' arXiv:2210.14324, 2022. The DPC4 source revision used here is {tex_escape(revisions[0])}: \url{{https://github.com/CMU-SAFARI/ChampSim/tree/{tex_escape(revisions[0])}}}.
 \end{{thebibliography}}
 \end{{document}}
 """
